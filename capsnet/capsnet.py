@@ -4,6 +4,7 @@
 import tensorflow as tf
 import numpy as np
 import os
+import mnist_data
 from tqdm import tqdm
 
 epsilon = 1e-9
@@ -22,27 +23,27 @@ iter_routing = 3
 # Tensorboard 保存位置
 logdir ='logdir'
 # 数据集路径
-dataset_path = 'data/MNIST'
+dataset_path = 'data/mnist'
 is_training= True
 
 # 定义加载mnist的函数
 def load_mnist(path, is_training):
-
+    train_imgs, train_lbls, test_imgs, test_lbls = mnist_data.download_data(dataset_path)
     #trX将加载储存所有60000张灰度图
-    fd = open(os.path.join(path, 'train-images.idx3-ubyte'))
+    fd = open(train_imgs)
     loaded = np.fromfile(file=fd, dtype=np.uint8)
     trX = loaded[16:].reshape((60000, 28, 28, 1)).astype(np.float)
 
-    fd = open(os.path.join(path, 'train-labels.idx1-ubyte'))
+    fd = open(train_lbls)
     loaded = np.fromfile(file=fd, dtype=np.uint8)
     trY = loaded[8:].reshape((60000)).astype(np.float)
 
     #teX将储存所有一万张测试用的图片
-    fd = open(os.path.join(path, 't10k-images.idx3-ubyte'))
+    fd = open(test_imgs)
     loaded = np.fromfile(file=fd, dtype=np.uint8)
     teX = loaded[16:].reshape((10000, 28, 28, 1)).astype(np.float)
 
-    fd = open(os.path.join(path, 't10k-labels.idx1-ubyte'))
+    fd = open(test_lbls)
     loaded = np.fromfile(file=fd, dtype=np.uint8)
     teY = loaded[8:].reshape((10000)).astype(np.float)
 

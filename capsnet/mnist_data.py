@@ -43,11 +43,11 @@ def maybe_download(filename, data_directory, source_url):
         sys.stdout.write("\r>> Downloading %s %.1f%%" % (filename, float(count * block_size) / float(total_size) * 100.))
         sys.stdout.flush()
 
-    if os.path.exists(filepath):
+    if os.path.isfile(filepath):
         print("file {} already download and extracted.".format(filename))
         return filepath
-    elif os.path.exists(filepath+'.gz'):
-        print("file {} already download, now extract it.".format(filename))
+    elif os.path.isfile(filepath+'.gz'):
+        print("file {} already download, now extract it.".format(filename+'.gz'))
     else:
         print('Not found {}, world downloaded from {}'.format(filepath, source_url))
         filepath, _ = urllib.request.urlretrieve(source_url, filepath+'.gz', download_progress)

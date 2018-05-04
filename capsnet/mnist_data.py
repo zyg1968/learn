@@ -46,7 +46,7 @@ def maybe_download(filename, data_directory, source_url):
     if os.path.exists(filepath):
         print("file {} already download and extracted.".format(filename))
         return filepath
-    elif not os.path.exists(filepath+'.gz'):
+    elif os.path.exists(filepath+'.gz'):
         print("file {} already download, now extract it.".format(filename))
     else:
         print('Not found {}, world downloaded from {}'.format(filepath, source_url))

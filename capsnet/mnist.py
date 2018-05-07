@@ -13,23 +13,21 @@ import tensorflow as tf
 import numpy as np
 import capsnet
 from tqdm import tqdm
+import config as cfg
 
 gimgs = []
 
-def train(msgqueue, num, batch_size = 8, 
-             dataset_path = '../data/mnist', save_path = '../savedir'):
-    train_sum_freq = 200
-    val_sum_freq = 1000
-    save_freq = 1000
+def train(msgqueue):
     cwd, _ = os.path.split(sys.argv[0])
-    data_path = os.path.join(cwd, dataset_path)
-    save_path = os.path.join(cwd, save_path)
-    trX, trY, max_num, valX, valY, num_val_batch = capsnet.load_mnist(True, data_path, batch_size)
+    data_path = os.path.join(cwd, cfg.data_path, cfg.name)
+    save_path = os.path.join(cwd, cfg.save_path, cfg.name, 'k{}'.format(cfg.kernel_size[0]))
+    log_path = os.path.join(cwd, cfg.log_path, cfg.name)
+    trX, trY, max_num, valX, valY, num_val_batch = capsnet.load_mnist(True, data_path, cfg.batch_size)
     #Y = valY[:num_val_batch * batch_size].reshape((-1, 1))
     num_tr_batch = max_num
-    num_val_batch = min(num, num_val_batch)
-    capsNet = capsnet.CapsNet(is_training=True, batch_size = batch_size, data_path=data_path, kernel_size=3)
-    print('Graph loaded')
+    num_val_batch = min(cfg.test_num, num_val_batch)
+    capsNet = capsnet.CapsNet(is_training=True)
+    tf.logging.info('Graph loaded')
     sv = tf.train.Supervisor(graph=capsNet.graph,
                                  logdir=save_path,
                                  save_model_secs=0)
@@ -44,7 +42,7 @@ def train(msgqueue, num, batch_size = 8,
             #for step in range(num_tr_batch):
                 global_step = i * num_tr_batch + step
 
-                if global_step>0 and global_step % train_sum_freq == 0:
+                if global_step>0 and global_step % cfg.train_sum_freq == 0:
                     _, loss, train_acc = sess.run(
                         [capsNet.train_op, 
                          capsNet.total_loss, 
@@ -52,8 +50,8 @@ def train(msgqueue, num, batch_size = 8,
                     assert not np.isnan(loss), 'Something wrong! loss is nan...'
                     #sv.summary_writer.add_summary(summary_str, global_step)
 
-                    print('{}: loss = {:.3f}, accurate = {:.3f}, 速度={:.2f}n/s'.format(
-                        global_step, loss, train_acc / batch_size, 
+                    tf.logging.info('{}: loss = {:.3f}, accurate = {:.3f}, 速度={:.2f}n/s'.format(
+                        global_step, loss, train_acc / cfg.batch_size, 
                         (global_step-startstep)/(time.time()-starttime)))
                     startstep = global_step
                     starttime = time.time()
@@ -61,69 +59,69 @@ def train(msgqueue, num, batch_size = 8,
                     sess.run(capsNet.train_op)
                 if global_step<=0:
                     continue
-                if val_sum_freq != 0 and (global_step) % val_sum_freq == 0:
+                if cfg.val_sum_freq != 0 and (global_step) % cfg.val_sum_freq == 0:
                     val_acc = 0
                     for i in tqdm(range(num_val_batch), total=num_val_batch, ncols=70, leave=False, unit='b'):
-                        start = i * batch_size
-                        end = start + batch_size
+                        start = i * cfg.batch_size
+                        end = start + cfg.batch_size
                         decimgs, predicts, acc = sess.run(
                             [capsNet.decoded, capsNet.argmax_idx, capsNet.accuracy], 
                             {capsNet.X: valX[start:end], capsNet.labels: valY[start:end]})
                         val_acc += acc
-                        imgs = (valX[start:end]*255)
-                        imgs = imgs.reshape((-1, 28, 28)).astype(np.uint8)
-                        decimgs = decimgs*255
-                        decimgs = decimgs.reshape((-1, 28, 28)).astype(np.uint8)
-                        msg=Messages(imgs, decimgs, predicts, valY[start:end], i, i<num_tr_batch-1)
-                        msgqueue.put(msg)
-                    val_acc = val_acc / (batch_size * num_val_batch)
-                    print('validate step: {} accurate = {:.3f}'.format(global_step, val_acc))
+                        if cfg.show_pic and msgqueue:
+                            imgs = (valX[start:end]*255)
+                            imgs = imgs.reshape((-1, 28, 28)).astype(np.uint8)
+                            decimgs = decimgs*255
+                            decimgs = decimgs.reshape((-1, 28, 28)).astype(np.uint8)
+                            msg=Messages(imgs, decimgs, predicts, valY[start:end], i, i<num_tr_batch-1)
+                            msgqueue.put(msg)
+                    val_acc = val_acc / (cfg.batch_size * num_val_batch)
+                    tf.logging.info('validate step: {} accurate = {:.3f}'.format(global_step, val_acc))
                 
-                if (global_step) % save_freq == 0:
+                if (global_step) % cfg.save_freq == 0:
                     sv.saver.save(sess, save_path + '/model_epoch_%d_step_%d' % (i, global_step))
 
         global_step = sess.run(capsNet.global_step)
         sv.saver.save(sess, save_path + '/model_epoch_%d_step_%d' % (i, global_step))
 
-def evaluate(msgqueue, num, batch_size = 32, 
-             dataset_path = '../data/mnist', save_path = '../logdir'):
+def evaluate(msgqueue=None):
     cwd, _ = os.path.split(sys.argv[0])
-    data_path = os.path.join(cwd, dataset_path)
-    save_path = os.path.join(cwd, save_path)
-    teX, teY, max_num = capsnet.load_mnist(False, data_path, batch_size)
-    num_te_batch = min(max_num, num) 
-    capsNet = capsnet.CapsNet(is_training=False, batch_size=batch_size, kernel_size=9)
-    print('Graph loaded')
+    data_path = os.path.join(cwd, cfg.data_path, cfg.name)
+    save_path = os.path.join(cwd, cfg.save_path, cfg.name, 'k{}'.format(cfg.kernel_size[0]))
+    teX, teY, max_num = capsnet.load_mnist(False, data_path, cfg.batch_size)
+    num_te_batch = min(max_num, cfg.test_num) 
+    capsNet = capsnet.CapsNet(is_training=False)
+    tf.logging.info('Graph loaded')
     with tf.Session(graph=capsNet.graph) as sess:
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(save_path))
-        print('Checkpoint restored')
+        tf.logging.info('Checkpoint restored')
         test_acc = 0
         begin = random.randint(0, max_num-num_te_batch)
         for i in tqdm(range(num_te_batch), total=num_te_batch, ncols=70, leave=False, unit='b'):
-            start = (i+begin) * batch_size
-            end = start + batch_size
+            start = (i+begin) * cfg.batch_size
+            end = start + cfg.batch_size
             decimgs, predicts, acc = sess.run([capsNet.decoded, capsNet.argmax_idx, capsNet.accuracy], {capsNet.X: teX[start:end], capsNet.labels: teY[start:end]})
             test_acc += acc
-            if i>0 and i%100 == 0:
-                print('{}: accurate = {:.3f}%'.format(i, test_acc*100 / (batch_size * i)))
-            imgs = (teX[start:end]*255)
-            imgs = imgs.reshape((-1, 28, 28)).astype(np.uint8)
-            decimgs = decimgs*255
-            decimgs = decimgs.reshape((-1, 28, 28)).astype(np.uint8)
-            msg=Messages(imgs, decimgs, predicts, teY[start:end], i, i<num_te_batch-1)
-            msgqueue.put(msg)
-        test_acc = test_acc*100 / (batch_size * num_te_batch)
-        print('The average({} batchs) test accurate is: {:.3f}%'.format(num_te_batch, test_acc))
+            if i>0 and i%cfg.train_sum_freq == 0:
+                tf.logging.info('{}: accurate = {:.3f}%'.format(i, test_acc*100 / (cfg.batch_size * i)))
+            if cfg.show_pic and msgqueue is not None:
+                imgs = (teX[start:end]*255)
+                imgs = imgs.reshape((-1, 28, 28)).astype(np.uint8)
+                decimgs = decimgs*255
+                decimgs = decimgs.reshape((-1, 28, 28)).astype(np.uint8)
+                msg=Messages(imgs, decimgs, predicts, teY[start:end], i, i<num_te_batch-1)
+                msgqueue.put(msg)
+        test_acc = test_acc*100 / (cfg.batch_size * num_te_batch)
+        tf.logging.info('The average({} batchs) test accurate is: {:.3f}%'.format(num_te_batch, test_acc))
 
 class myThread (threading.Thread):
-    def __init__(self, name, train_num, test_num, is_training=False):
+    def __init__(self, name, queue, is_training=False):
         threading.Thread.__init__(self)
         self.name = name
-        self.train_num = train_num
-        self.test_num = test_num
-        self.running=False
+        self.queue = queue
         self.is_training=is_training
+        self.running=False
 
     def run(self):
         print ("开启线程： " + self.name)
@@ -131,9 +129,9 @@ class myThread (threading.Thread):
         #threadLock.acquire()
         self.running=True
         if self.is_training:
-            train(msgqueue, self.test_num)
+            train(self.queue)
         else:
-            evaluate(msgqueue, self.test_num)
+            evaluate(self.queue)
         self.running=False
         print ("退出线程： " + self.name)
 
@@ -148,14 +146,14 @@ class Messages(object):
 
 
 class DrawFigure(threading.Thread):
-    def __init__(self, parent, name, num, queue):
+    def __init__(self, parent, name):
         threading.Thread.__init__(self)
         self.root=parent
         self.name = name
-        self.queue=queue
-        self.test_num=num
+        self.queue = None
+        if cfg.show_pic:
+            self.queue=queue.Queue()
         self.running=True
-        self.msgs=[]
         self.label = Label(self.root, text="空闲")
         self.label.grid(row=0, column=0, columnspan=4, sticky=EW, padx=10, pady=10)
         self.plot_frame = ScrolledWindow(self.root)
@@ -184,8 +182,6 @@ class DrawFigure(threading.Thread):
 
     def quit(self):
         self.running = False
-        sys.stdout = None
-        sys.stderr = None
         self.root.quit()
         self.root.destroy()
         exit()
@@ -195,9 +191,7 @@ class DrawFigure(threading.Thread):
         gimgs = []
         self.label['text'] = '正在全力训练中……'
         self.btnTrain['state']=DISABLED
-        train_num=600
-        test_num=10
-        thtrain = myThread('训练', train_num, test_num, is_training=True)
+        thtrain = myThread('训练', self.queue, is_training=True)
         thtrain.setDaemon(True)
         thtrain.start()
 
@@ -206,15 +200,12 @@ class DrawFigure(threading.Thread):
         gimgs = []
         self.label['text'] = '正在全力测试中……'
         self.btnTest['state']=DISABLED
-        train_num=600
-        test_num=10
-        thtrain = myThread('计算', train_num, test_num, is_training=False)
+        thtrain = myThread('计算', self.queue, is_training=False)
         thtrain.setDaemon(True)
         thtrain.start()
 
 
     def previous(self):
-        global gimgs
         oldindex = self.current
         if self.current>0:
             self.current -= 1
@@ -226,7 +217,6 @@ class DrawFigure(threading.Thread):
                 self.btnNext['state']=NORMAL
 
     def next(self):
-        global gimgs
         oldindex = self.current
         if self.current<len(gimgs)-1:
             self.current += 1
@@ -243,8 +233,8 @@ class DrawFigure(threading.Thread):
         #threadLock.acquire()
         self.running=True
         while self.running:
-            if msgqueue.qsize():
-                msg=msgqueue.get(0)
+            if self.queue and self.queue.qsize():
+                msg=self.queue.get(0)
                 #self.draw()
                 self.on_msg(msg)
             time.sleep(0.1)
@@ -272,6 +262,8 @@ class DrawFigure(threading.Thread):
             self.btnTest['state']=NORMAL
 
     def show(self, index, oldindex):
+        if not cfg.show_pic:
+            return
         global gimgs
         if oldindex==index:
             return
@@ -317,14 +309,13 @@ def arraytophoto(a, scale=1):
 
 
 if __name__ == '__main__':
-    msgqueue=queue.Queue()
+    tf.logging.set_verbosity(tf.logging.INFO)
+    cfg.init_cfg()
     root=Tk()
     root.geometry('1080x820')
     root.resizable(width=True, height=True)
     root.title("胶囊网络手写输入测试")
-    train_num=6800
-    test_num=20
-    thplot = DrawFigure(root, "显示", test_num, msgqueue)
+    thplot = DrawFigure(root, "显示")
     thplot.setDaemon(True)
     thplot.start()
     root.mainloop()

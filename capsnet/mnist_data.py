@@ -1,3 +1,6 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import gzip
 import os
 
@@ -47,10 +50,10 @@ def maybe_download(filename, data_directory, source_url):
         print("file {} already download and extracted.".format(filename))
         return filepath
     elif os.path.isfile(filepath+'.gz'):
-        print("file {} already download, now extract it.".format(filename+'.gz'))
+        print("file {} already download, now extract it.".format(filepath+'.gz'))
     else:
         print('Not found {}, world downloaded from {}'.format(filepath, source_url))
-        filepath, _ = urllib.request.urlretrieve(source_url, filepath+'.gz', download_progress)
+        filepath, _ = six.moves.urllib.request.urlretrieve(source_url, filepath+'.gz', download_progress)
         print()
         print('Successfully Downloaded', filename)
     with gzip.open(filepath+'.gz', 'rb') as f_in, open(filepath, 'wb') as f_out:
